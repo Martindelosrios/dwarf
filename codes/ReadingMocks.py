@@ -105,5 +105,24 @@ ax[0].set_ylabel(r'$\beta [^{\circ}]$')
 ax[1].set_xlabel(r'$\mu_{\alpha}$ [mas/year]')
 ax[1].set_ylabel(r'$\mu_{\beta}$ [mas/year]')
 # -
+# !ls ../data
+
+
+import pandas as pd
+
+bkg = pd.read_csv('../data/gaia_bkg_mock.tsv', skiprows = list(np.hstack((np.arange(49),np.array([50,51])))), delimiter = ';')
+
+bkg
+
+bkg.columns
+
+# +
+fig,ax = plt.subplots(1,2)
+
+ax[0].scatter(bkg['RAICRS'], bkg['DEICRS'])
+ax[1].scatter(bkg['_Glon'], bkg['_Glat'])
+# -
+
+
 
 
