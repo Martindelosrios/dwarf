@@ -1,5 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+from astroquery.vizier import Vizier
+import sys
+import scipy
+
+# ## Let's read the simulated dwarf
 
 # !ls ../data/mocks/
 
@@ -80,8 +87,8 @@ fig,ax = plt.subplots(1,2)
 ax[0].scatter(obs[:,2] * 180/np.pi, obs[:,3] * 180/np.pi)
 ax[1].scatter(obs[:,5]/1e3, obs[:,6]/1e3)
 
-ax[0].scatter(data[1,6], data[1,7], color = 'magenta', marker = '+')
-ax[1].scatter(data[1,16], data[1,17], color = 'magenta', marker = '+')
+ax[0].scatter(data[i,6], data[i,7], color = 'magenta', marker = '+')
+ax[1].scatter(data[i,16], data[i,17], color = 'magenta', marker = '+')
 
 ax[0].scatter(obs_clean[:,1]-180, obs_clean[:,2]-30, c = 'red', marker = '+')
 ax[1].scatter(obs_clean[:,3], obs_clean[:,4], c = 'red', marker = '+')
@@ -105,24 +112,264 @@ ax[0].set_ylabel(r'$\beta [^{\circ}]$')
 ax[1].set_xlabel(r'$\mu_{\alpha}$ [mas/year]')
 ax[1].set_ylabel(r'$\mu_{\beta}$ [mas/year]')
 # -
-# !ls ../data
+# ## Let's read the simulated backgroung
+#
+# * Downloaded from https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VI/137/gum_mw&-out.max=50&-out.form=HTML%20Table&-out.add=_r&-out.add=_RAJ,_DEJ&-sort=_r&-oc.form=sexa
+# * Data From https://arxiv.org/abs/1202.0132
+# * In demeters paper they use data only from 20° < |b| < 90°
 
+# +
+glon_center = 162.5
+glat_center = -42.5
+gcenter = SkyCoord(frame="galactic", l = glon_center, b = glat_center, unit=(u.deg, u.deg))
 
-import pandas as pd
+glon_ref = 12.5
+glat_ref = -42.5
+gref = SkyCoord(frame="galactic", l = glon_ref, b = glat_ref, unit=(u.deg, u.deg))
 
-bkg = pd.read_csv('../data/gaia_bkg_mock.tsv', skiprows = list(np.hstack((np.arange(49),np.array([50,51])))), delimiter = ';')
+size = 5 # degree
+row_limit = -1 #5000
 
-bkg
+# +
+ra_center = gcenter.transform_to('icrs').ra.value
+dec_center = gcenter.transform_to('icrs').dec.value
 
-bkg.columns
+v = Vizier(columns=['RAICRS','DEICRS','pmRA','pmDE'],
+           column_filters={"Host":"1"}, row_limit = row_limit)
+
+#v.ROW_LIMIT = 100
+
+bkg = v.query_region(SkyCoord(ra = ra_center, dec=dec_center, unit=(u.deg, u.deg),frame='icrs'),
+                        width= str(size) + "d",
+                        catalog=["VI/137/gum_mw"])
+
+equatorial_coords = SkyCoord( ra  = bkg[0]['RAICRS'], 
+                              dec = bkg[0]['DEICRS'], 
+                              pm_ra_cosdec =  bkg[0]['pmRA'], 
+                              pm_dec = bkg[0]['pmDE'], 
+                              frame = 'icrs')
+
+# Transform to Galactic coordinates
+galactic_coords = equatorial_coords.transform_to('galactic')
+glon_full = galactic_coords.l.value
+glat_full = galactic_coords.b.value
+
+# Access proper motion in Galactic coordinates
+pmlon_full = galactic_coords.pm_l_cosb.to(u.mas/u.yr).value  # Proper motion in Galactic longitude (l)
+pmlat_full = galactic_coords.pm_b.to(u.mas/u.yr).value       # Proper motion in Galactic latitude (b)
+
+full = np.vstack((glon_full, glat_full, pmlon_full, pmlat_full)).T
+# -
+
+full
+
+# +
+ra_ref = gref.transform_to('icrs').ra.value
+dec_ref = gref.transform_to('icrs').dec.value
+
+v = Vizier(columns=['RAICRS','DEICRS','pmRA','pmDE'],
+           column_filters={"Host":"1"}, row_limit = row_limit)
+
+#v.ROW_LIMIT = 100
+
+ref = v.query_region(SkyCoord(ra = ra_ref, dec=dec_ref, unit=(u.deg, u.deg),frame='icrs'),
+                        width= str(size) + "d",
+                        catalog=["VI/137/gum_mw"])
+
+equatorial_coords = SkyCoord( ra  = ref[0]['RAICRS'], 
+                              dec = ref[0]['DEICRS'], 
+                              pm_ra_cosdec =  ref[0]['pmRA'], 
+                              pm_dec = ref[0]['pmDE'], 
+                              frame = 'icrs')
+
+# Transform to Galactic coordinates
+galactic_coords = equatorial_coords.transform_to('galactic')
+glon_ref = galactic_coords.l.value - glon_ref + glon_center # To center around the same latitud
+glat_ref = galactic_coords.b.value
+
+# Access proper motion in Galactic coordinates
+pmlon_ref = galactic_coords.pm_l_cosb.to(u.mas/u.yr).value  # Proper motion in Galactic longitude (l)
+pmlat_ref = galactic_coords.pm_b.to(u.mas/u.yr).value       # Proper motion in Galactic latitude (b)
+
+ref = np.vstack((glon_ref, glat_ref, pmlon_ref, pmlat_ref)).T
 
 # +
 fig,ax = plt.subplots(1,2)
 
-ax[0].scatter(bkg['RAICRS'], bkg['DEICRS'])
-ax[1].scatter(bkg['_Glon'], bkg['_Glat'])
+ax[0].scatter(full[:,0], full[:,1])
+ax[1].scatter(full[:,2], full[:,3])
+
+ax[0].scatter(ref[:,0], ref[:,1], c = 'red')
+ax[1].scatter(ref[:,2], ref[:,3], c = 'red')
+
+ax[0].set_xlabel('$l$ [°]')
+ax[0].set_ylabel('$b$ [°]')
+
+ax[1].set_xlabel('$\mu_{l}$ [mas/yr]')
+ax[1].set_ylabel('$\mu_{b}$ [mas/yr]')
+# -
+# ## Let's inpaint a dwarf galaxy
+
+# +
+np.random.shuffle(full)
+full = full[:500]
+
+np.random.shuffle(ref)
+ref = ref[:500]
 # -
 
+glon_dw = (obs[:,2] * 180/np.pi - data[i,6]) + glon_center # Just to center the dwarf galaxy
+glat_dw = (obs[:,3] * 180/np.pi - data[i,7]) + glat_center
+pmlon_dw = obs[:,5] 
+pmlat_dw = obs[:,6] 
+dw_data = np.vstack((glon_dw, glat_dw, pmlon_dw, pmlat_dw)).T
+
+full = np.vstack((full, dw_data))
+
+full.shape
+
+# +
+fig,ax = plt.subplots(1,2)
+
+ax[0].scatter(full[:,0], full[:,1])
+ax[0].scatter(dw_data[:,0], dw_data[:,1], color = 'magenta', marker = '+')
+
+ax[1].scatter(full[:,2], full[:,3])
+ax[1].scatter(dw_data[:,2], dw_data[:,3], color = 'magenta', marker = '+')
+# -
+
+# ## Let's try demeter
+
+module_path = 'demeter/'
+sys.path.append(module_path)
+import demeter
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+# +
+#test function to load gaia data -- reset median_ra and median_dec to
+#test values around edges of survey 
+#set parameters 
+grid_size = 96
+edge_size = 6
+front = int(edge_size)
+back  = int(grid_size-edge_size)
+
+#center of the sky field in RA and DEC 
+median_ra  = ra_center
+median_dec = dec_center
 
 
+#width of the field in gnomonic coordinates 
+gnomonic_width = 0.0175
 
+#width of the proper motion field 
+pmfield_size = 500.0
+
+# +
+lmin = glon_center - 2.5
+lmax = glon_center + 2.5
+bmin = glat_center - 2.5
+bmax = glat_center + 2.5
+
+field_image, edges = np.histogramdd(full,\
+                            bins=(np.linspace(lmin, lmax, grid_size +1),
+                                  np.linspace(bmin, bmax, grid_size +1),
+                                  np.linspace(-200, 200, grid_size +1),
+                                  np.linspace(-200, 200, grid_size +1) ) )
+
+random_image, edges = np.histogramdd(ref,\
+                            bins=(np.linspace(lmin, lmax, grid_size +1),
+                                  np.linspace(bmin, bmax, grid_size +1),
+                                  np.linspace(-200, 200, grid_size +1),
+                                  np.linspace(-200, 200, grid_size +1) ) )
+# -
+
+plt.imshow(field_image.sum(axis=(2,3)))
+
+# +
+smooth_field = scipy.ndimage.gaussian_filter(field_image,3.0)
+
+plt.imshow(smooth_field.sum(axis=(2,3))/np.max(smooth_field.sum(axis=(2,3))))
+plt.clim([0,1])
+plt.show()
+
+# +
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+print(device)
+
+wv = demeter.WaveNet(grid_size, grid_size, J=4, wavelets = ['bior5.5'])
+out = wv(torch.Tensor(field_image).to(device)).to('cpu').numpy()
+rand_out = wv(torch.Tensor(random_image).to(device)).to('cpu').numpy()
+# -
+
+out = scipy.ndimage.gaussian_filter(out,3.0)
+rand_out = scipy.ndimage.gaussian_filter(rand_out,3.0)
+
+# +
+#remove outer edges of image 
+out1 = np.zeros((grid_size, grid_size, grid_size, grid_size))
+out1[front:back,front:back,front:back,front:back] = 1
+out1 = out*out1
+
+plt.imshow(out1.sum(axis=(2,3))/np.max(out1.sum(axis=(2,3))))
+plt.colorbar()
+plt.clim([0,1])
+plt.show()
+# -
+
+#standardize the real output 
+out = (out-np.mean(rand_out))/np.std(rand_out)
+
+# +
+#apply threshold 
+edge_size = 6
+front = int(edge_size)
+back = int(grid_size-edge_size)
+nstars = len(ref)
+
+#apply significance correction 
+out = out / (-0.6*np.log10(nstars)+4.)
+
+#applying thresholding 
+mask = out < 5.0 
+#out[mask] = 0
+
+#remove outer edges of image
+out1 = np.zeros((grid_size, grid_size, grid_size, grid_size))
+out1[front:back,front:back,front:back,front:back] = 1
+out1 = out*out1
+# -
+
+plt.imshow(out1.sum(axis=(2,3)))
+plt.colorbar()
+plt.show()
+
+#find remaining hotspots 
+blobs, significance = demeter.find_blobs(out1, threshold=9)
+
+print(blobs)
+print(significance)
+
+# +
+fig, ax = plt.subplots(figsize=(16,16))
+
+#plot background stars 
+plt.scatter(ref[:,0],ref[:,1], alpha=0.5, color='grey', s=100, marker='*')
+
+#plot injected stars 
+plt.scatter(dw_data[:,0], dw_data[:,1], alpha=1., color='salmon',s=800, marker='*')
+
+#plot returned stars
+for cluster in clusters:
+    if(len(cluster)>=5):
+        plt.scatter(cluster['ra'], cluster['dec'], color='midnightblue',s=300, marker='*')
+
+plt.show()
+
+mask = np.isin(cluster['ra'], dwarf['ra'])
+
+if(len(cluster[mask]==len(dwarf))):
+    print('all injected stars recovered successfully!')
