@@ -59,7 +59,7 @@ for j in range(6):
 plt.savefig('../graph/TrueGalsProps_' + str(igal) + '.pdf')
 # -
 
-i = 320
+i = np.random.randint(len(data))
 Id = int(data[i,0])
 
 # +
@@ -123,11 +123,11 @@ glon_center = 150.5
 glat_center = -40
 gcenter = SkyCoord(frame="galactic", l = glon_center, b = glat_center, unit=(u.deg, u.deg))
 
-glon_ref = 12.5
+glon_ref = 120.5
 glat_ref = glat_center
 gref = SkyCoord(frame="galactic", l = glon_ref, b = glat_ref, unit=(u.deg, u.deg))
 
-size = 2 # degree
+size = 5 # degree
 row_limit = -1 #5000
 
 # +
@@ -173,7 +173,7 @@ v = Vizier(columns=['RAICRS','DEICRS','pmRA','pmDE'],
 #v.ROW_LIMIT = 100
 
 ref = v.query_region(SkyCoord(ra = ra_ref, dec=dec_ref, unit=(u.deg, u.deg),frame='icrs'),
-                        width= str(size) + "d",
+                        width= str(size+2) + "d",
                         catalog=["VI/137/gum_mw"])
 
 equatorial_coords = SkyCoord( ra  = ref[0]['RAICRS'], 
@@ -196,11 +196,11 @@ ref = np.vstack((glon_ref, glat_ref, pmlon_ref, pmlat_ref)).T
 # +
 fig,ax = plt.subplots(1,2)
 
-ax[0].scatter(full[:,0], full[:,1])
-ax[1].scatter(full[:,2], full[:,3])
-
 ax[0].scatter(ref[:,0], ref[:,1], c = 'red')
 ax[1].scatter(ref[:,2], ref[:,3], c = 'red')
+
+ax[0].scatter(full[:,0], full[:,1])
+ax[1].scatter(full[:,2], full[:,3])
 
 ax[0].set_xlabel('$l$ [°]')
 ax[0].set_ylabel('$b$ [°]')
@@ -212,19 +212,24 @@ ax[1].set_ylabel('$\mu_{b}$ [mas/yr]')
 
 # +
 np.random.shuffle(full)
-full = full[:500]
+full = full[:5000]
 
 np.random.shuffle(ref)
-ref = ref[:500]
+ref = ref[:5000]
+
+# +
+eps_lon = 1.5 # Inpaint the dwarf out of the center
+eps_lat = -1.6
+
+glon_dw = (obs[:,2] * 180/np.pi - data[i,6]) + glon_center + eps_lon # Just to center the dwarf galaxy
+glat_dw = (obs[:,3] * 180/np.pi - data[i,7]) + glat_center + eps_lat
+pmlon_dw = obs[:,5] / 1e3
+pmlat_dw = obs[:,6] / 1e3
+dw_data = np.vstack((glon_dw, glat_dw, pmlon_dw, pmlat_dw)).T
 # -
 
-glon_dw = (obs[:,2] * 180/np.pi - data[i,6]) + glon_center # Just to center the dwarf galaxy
-glat_dw = (obs[:,3] * 180/np.pi - data[i,7]) + glat_center
-pmlon_dw = obs[:,5] / 10
-pmlat_dw = obs[:,6] / 10
-dw_data = np.vstack((glon_dw, glat_dw, pmlon_dw, pmlat_dw)).T
-
-noDwarf = np.copy(full)
+#noDwarf = np.copy(full)
+full = np.copy(noDwarf)
 full = np.vstack((full, dw_data))
 
 full.shape
@@ -232,9 +237,12 @@ full.shape
 # +
 fig,ax = plt.subplots(1,2)
 
-ax[0].scatter(full[:,0], full[:,1])
-ax[0].scatter(dw_data[:,0], dw_data[:,1], color = 'magenta', marker = '+')
+ax[0].scatter(ref[:,0], ref[:,1], label = 'Ref')
+ax[0].scatter(full[:,0], full[:,1], label = 'Bkg')
+ax[0].scatter(dw_data[:,0], dw_data[:,1], color = 'magenta', marker = '+', label = 'Dwarf')
+ax[0].legend(loc = 'lower right')
 
+ax[1].scatter(ref[:,2], ref[:,3])
 ax[1].scatter(full[:,2], full[:,3])
 ax[1].scatter(dw_data[:,2], dw_data[:,3], color = 'magenta', marker = '+')
 # -
@@ -274,17 +282,23 @@ lmax = glon_center + 2.5
 bmin = glat_center - 2.5
 bmax = glat_center + 2.5
 
+pml_max = 200
+pml_min = -200
+
+pmb_max = 200
+pmb_min = -200
+
 field_image, edges = np.histogramdd(full,\
                             bins=(np.linspace(lmin, lmax, grid_size +1),
                                   np.linspace(bmin, bmax, grid_size +1),
-                                  np.linspace(-200, 200, grid_size +1),
-                                  np.linspace(-200, 200, grid_size +1) ) )
+                                  np.linspace(pml_min, pml_max, grid_size +1),
+                                  np.linspace(pmb_min, pmb_max, grid_size +1) ) )
 
 random_image, edges = np.histogramdd(ref,\
                             bins=(np.linspace(lmin, lmax, grid_size +1),
                                   np.linspace(bmin, bmax, grid_size +1),
-                                  np.linspace(-200, 200, grid_size +1),
-                                  np.linspace(-200, 200, grid_size +1) ) )
+                                  np.linspace(pml_min, pml_max, grid_size +1),
+                                  np.linspace(pmb_min, pmb_max, grid_size +1) ) )
 # -
 
 plt.imshow(field_image.sum(axis=(2,3)))
@@ -349,47 +363,48 @@ plt.colorbar()
 plt.show()
 
 #find remaining hotspots 
-blobs, significance = demeter.find_blobs(out1, threshold=9)
+blobs, significance = demeter.find_blobs(out1, threshold=10)
 
 print(blobs)
 print(significance)
 
+# +
+lpix = np.floor((full[:,0] - lmin) / ((lmax - lmin)/ (grid_size - 1))) + 1
+lpix = lpix.astype(int)
+
+bpix = np.floor((full[:,1] - bmin) / ((bmax - bmin)/ (grid_size - 1))) + 1
+bpix = bpix.astype(int)
+
+pmlpix = np.floor((full[:,2] - pml_min) / ((pml_max - pml_min)/ (grid_size - 1))) + 1
+pmlpix = pmlpix.astype(int)
+
+pmbpix = np.floor((full[:,3] - pmb_min) / ((pmb_max - pmb_min)/ (grid_size - 1))) + 1
+pmbpix = pmbpix.astype(int)
+# -
+
 stars = []
 for blob in blobs:
-    x_pix = x * grid_size/(2*gnomonic_width)+grid_size/2.
-    y_pix = y * grid_size/(2*gnomonic_width)+grid_size/2.
-    pmra_pix = data['pmra'] * grid_size/(2*pmfield_size)+grid_size/2.
-    pmdec_pix = data['pmdec'] * grid_size/(2*pmfield_size)+grid_size/2.
-
-    cut_idx1 = (x_pix-blob[0])**2/(blob[4])**2+(y_pix-blob[1])**2/(blob[5])**2<1.0
-    cut_idx2 = (pmra_pix-blob[2])**2/(blob[6])**2+(pmdec_pix-blob[3])**2/(blob[7])**2<1.0
-    stars.append(data[cut_idx1 & cut_idx2])
-return stars
-
-#find clusters in original dataset 
-clusters = demeter.find_clusters(full, full[:,0], full[:,1], gnomonic_width, pmfield_size, grid_size, blobs)
+    cut_idx1 = (lpix - blob[0])**2 / (blob[4])**2 + (bpix - blob[1])**2 / (blob[5])**2 < 1.0
+    cut_idx2 = (pmlpix - blob[2])**2 / (blob[6])**2 + (pmbpix - blob[3])**2 / (blob[7])**2 < 1.0
+    stars.append(full[cut_idx1 & cut_idx2])
 
 # +
-fig, ax = plt.subplots(figsize=(16,16))
+fig, ax = plt.subplots(1,2,figsize=(6,6))
 
 #plot background stars 
-ax.scatter(ref[:,0],ref[:,1], alpha=0.5, color='grey', s=100, marker='*')
+ax[0].scatter(ref[:,0],ref[:,1], alpha=0.5, color='grey', s=100, marker='*')
+ax[1].scatter(ref[:,2],ref[:,3], alpha=0.5, color='grey', s=100, marker='*')
 
-#plot injected stars 
-ax.scatter(dw_data[:,0], dw_data[:,1], alpha=1., color='salmon',s=800, marker='*')
-
-# +
 #plot returned stars
-for cluster in clusters:
-    if(len(cluster)>=5):
-        plt.scatter(cluster['ra'], cluster['dec'], color='midnightblue',s=300, marker='*')
+for star in stars:
+    if(len(star)>=5):
+        ax[0].scatter(star[:,0], star[:,1], color='midnightblue',s=300, marker='*')
+        ax[1].scatter(star[:,2], star[:,3], color='midnightblue',s=300, marker='*')
+        
+#plot injected stars 
+ax[0].scatter(dw_data[:,0], dw_data[:,1], alpha=1., color='salmon',s=800, marker='*', facecolors="none")
+ax[1].scatter(dw_data[:,2], dw_data[:,3], alpha=1., color='salmon',s=800, marker='*', facecolors="none")
 
-plt.show()
-
-mask = np.isin(cluster['ra'], dwarf['ra'])
-
-if(len(cluster[mask]==len(dwarf))):
-    print('all injected stars recovered successfully!')
 # -
 
 # ## Let's try EE
@@ -431,7 +446,8 @@ def find_indices_by_threshold(upsilon_values, kstar_values, upsilon_thresh, ksta
     return indices
 
 
-# +
+# -
+
 # Function to plot the Upsilon sequences
 def plot_nlpval(ax, nlpval1, nlpval2, nlpval3, label1, label2, label3,crit_v):
     ax.plot(range(4, len(nlpval1) + 4), nlpval1, color='limegreen', linewidth=2, label=label1)
@@ -500,9 +516,10 @@ critical_upsilon_threshold
 # +
 fig,ax = plt.subplots(1,2)
 
-ax[0].scatter(ref[:,0], ref[:,1], c = 'black', marker = '+')
-ax[0].scatter(full[:,0], full[:,1], c = 'red', marker = '+')
-ax[0].scatter(dw_data[:,0], dw_data[:,1], c = 'blue', marker = '.')
+ax[0].scatter(ref[:,0], ref[:,1], c = 'black', marker = '+', label = 'Ref')
+ax[0].scatter(full[:,0], full[:,1], c = 'red', marker = '+', label = 'Full')
+ax[0].scatter(dw_data[:,0], dw_data[:,1], c = 'blue', marker = '.', label = 'Dwarf')
+ax[0].legend()
 
 # #%ax[0].set_xlim(-0.012, -0.006)
 # #%ax[0].set_ylim(-0.012, -0.006)
@@ -573,22 +590,24 @@ ax[1].set_xlabel('$K_{*}$')
 
 # +
 fig,ax = plt.subplots(1,2)
-th = 27#critical_upsilon_threshold
-ax[0].scatter(full[upsilon_values_anomaly > th,0], full[upsilon_values_anomaly > th,1], 
-              c = upsilon_values_anomaly[upsilon_values_anomaly > th], marker = 'o', vmin = 0, vmax = np.max(upsilon_values_anomaly))
-#aux = Ellipse((np.mean(ra_inj), np.mean(dec_inj)), np.std(ra_inj), np.std(dec_inj), edgecolor='black',
-#              facecolor='none', linewidth=2)
-#ax[0].add_patch(aux)
-#ax[0].scatter(xx_dwarf, yy_dwarf, facecolors='none', edgecolors='black', marker = 'o')
-ax[0].scatter(dw_data[:,0], dw_data[:,1], marker = '.', c = 'black', s = 10)
+th = 22#critical_upsilon_threshold
+ax[0].scatter(dw_data[:,0], dw_data[:,1], marker = 'o',facecolors = 'none', edgecolors = 'black', s = 100)
+ind = np.argsort(upsilon_values_anomaly)[::-1]
 
-ax[0].set_xlim(glon_center - 1, glon_center + 1)
-ax[0].set_ylim(glat_center - 1, glat_center + 1)
+#ax[0].scatter(full[upsilon_values_anomaly > th,0], full[upsilon_values_anomaly > th,1], 
+#              c = upsilon_values_anomaly[upsilon_values_anomaly > th], marker = 'o', vmin = 0, vmax = np.max(upsilon_values_anomaly))
 
-#im1 = ax[1].scatter(ref[:,0], ref[:,1], c = upsilon_values_no_anomaly, marker = 'o', vmin = 0, vmax = 20)
-#plt.colorbar(im1)
+ax[0].scatter(full[ind[:250],0], full[ind[:250],1], 
+              c = upsilon_values_anomaly[ind[:250]], marker = 'o', vmin = 0, vmax = np.max(upsilon_values_anomaly))
+
+
+#ax[0].set_xlim(glon_center - 1, glon_center + 1)
+#ax[0].set_ylim(glat_center - 1, glat_center + 1)
+
+im1 = ax[1].scatter(noDwarf[upsilon_values_no_anomaly > th,0], noDwarf[upsilon_values_no_anomaly > th,1], 
+                    c = upsilon_values_no_anomaly[upsilon_values_no_anomaly > th], marker = 'o', vmin = 0, vmax = np.max(upsilon_values_anomaly))
+plt.colorbar(im1)
 #ax[1].set_xlim(-0.012, -0.006)
 #ax[1].set_ylim(-0.012, -0.006)
 # -
-
 
