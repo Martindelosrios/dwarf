@@ -8,6 +8,24 @@ import scipy
 
 # ## Let's read the simulated dwarf
 
+# The simulated dwarf galaxies come from the paper (https://academic.oup.com/mnras/article/453/1/541/1750325) and are stored in:
+#
+# https://drive.google.com/drive/folders/1F2P4sP1uc-4kFd6_OjUP5nZJZxBuimlt?usp=sharing
+#
+# The library described in the paper was stored in several sub-libraries (lib95-lib99), each of which is a random subset of the main library (so you can take each one as a library in its own right, drawn from the same parameter distribution as the combination). 
+#
+# Each sub-library contains:
+#
+# -  library.survey.UFGX_LIB9?.dat - the library log indicating the (true) physical parameters of each of the simulated UFs. Each simulated galaxy has a unique ID starting with the sublibrary ID, e.g. 95???? for UFs in lib95. 
+# - true.lib9?.tgz - error free data. This tar file contains one file per simulated UF, named true_ID.dat where ID is the identifier used in the library log referenced above. For each UF, it contains data for stars observable by Gaia without errors.
+# - obs.lib9?.tgz - data with Gaia errors. This tar file contains one file per simulated UF, named obs_ID.dat where ID is the identifier used in the library log referenced above. For each UF, it contains data for stars observable by Gaia with end-of-mission errors (for the nominal mission time of 5yr). .
+#
+# As you can see from the description above, we are including the error-free data in case you want to simulate DR3 errors, instead of the end-of-mission errors we simulated in Antoja et al. 2015 (Note that this is probably obsolete as the errors simulations were done based on projections before Gaia started collecting data even, so keep that in mind)
+
+# MARTIN:
+# - Each sublibrary contains 3000 galaxies, so we have 15k simulated galaxies.
+# - For each galaxy we have 2 files, one with errors (obs*.dat) and one without errors (true*.dat).
+
 # !ls ../data/mocks/
 
 # +
@@ -32,7 +50,7 @@ import scipy
 # unit:         Lsun           M/Lsun      km/s       kpc       kpc   deg   deg   km/s deg   deg   Msolar             deg   mas/yr   mas/yr   mas/yr   mas/yr
 #    ID           Lv              M/L    sigmav        rh      dist     l     b   Vgal phiv thetav   stMass   Nobs    theta      dmu     mucm    mulcm    mubcm
 
-igal = 95
+igal = 98
 data = np.loadtxt('../data/mocks/library.survey.UFGX_LIB' + str(igal) + '.dat')
 
 data_labels = ['ID','$Log_{10} ( L_{v} [L_{\odot}])$','$Log_{10} ( M/L [M_{\odot}/L_{\odot}])$','$\sigma_{v} [km/s]$',
@@ -81,16 +99,22 @@ obs.shape
 
 obs_clean.shape
 
+# - The angular positions with errors are in radians while the ones without errors are in degree.
+# - The "True" angular position of the galaxy is in degree.
+# - The angular positions without errors **do not agree** with the true one.
+# - I am dividing the peculiar velocities with errors by $10^{3}$ for them to math the "true" peculiar velocity.
+# - The peculiar velocities without error are displaced from the "true".
+
 # +
 fig,ax = plt.subplots(1,2)
 
-ax[0].scatter(obs[:,2] * 180/np.pi, obs[:,3] * 180/np.pi)
+ax[0].scatter(obs[:,2] * 180/np.pi, obs[:,3] * 180/np.pi, label = 'w errors')
 ax[1].scatter(obs[:,5]/1e3, obs[:,6]/1e3)
 
-ax[0].scatter(data[i,6], data[i,7], color = 'magenta', marker = '+')
-ax[1].scatter(data[i,16], data[i,17], color = 'magenta', marker = '+')
+ax[0].scatter(data[i,6], data[i,7], color = 'magenta', marker = '*', label = 'True')
+ax[1].scatter(data[i,16], data[i,17], color = 'magenta', marker = '*')
 
-ax[0].scatter(obs_clean[:,1]-180, obs_clean[:,2]-30, c = 'red', marker = '+')
+ax[0].scatter(obs_clean[:,1]-180, obs_clean[:,2]-30, c = 'red', marker = '+', label = 'w/o errors')
 ax[1].scatter(obs_clean[:,3], obs_clean[:,4], c = 'red', marker = '+')
 
 ax[0].set_xlabel(r'$\alpha [^{\circ}]$')
@@ -98,25 +122,16 @@ ax[0].set_ylabel(r'$\beta [^{\circ}]$')
 
 ax[1].set_xlabel(r'$\mu_{\alpha}$ [mas/year]')
 ax[1].set_ylabel(r'$\mu_{\beta}$ [mas/year]')
-# +
-fig,ax = plt.subplots(1,2)
 
-ax[0].scatter(obs_clean[:,1], obs_clean[:,2], c = 'red', marker = '+')
-ax[1].scatter(obs_clean[:,3], obs_clean[:,4], c = 'red', marker = '+')
+ax[0].legend()
 
-#ax[0].scatter(data[1,6], data[1,7], color = 'magenta')
-
-ax[0].set_xlabel(r'$\alpha [^{\circ}]$')
-ax[0].set_ylabel(r'$\beta [^{\circ}]$')
-
-ax[1].set_xlabel(r'$\mu_{\alpha}$ [mas/year]')
-ax[1].set_ylabel(r'$\mu_{\beta}$ [mas/year]')
+ax[0].set_title('Gal Id: ' + str(Id))
 # -
 # ## Let's read the simulated backgroung
 #
 # * Downloaded from https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VI/137/gum_mw&-out.max=50&-out.form=HTML%20Table&-out.add=_r&-out.add=_RAJ,_DEJ&-sort=_r&-oc.form=sexa
 # * Data From https://arxiv.org/abs/1202.0132
-# * In demeters paper they use data only from 20° < |b| < 90°
+# * In Antoja et al. paper they use data only from 20° < |b| < 90°
 
 # +
 glon_center = 150.5
@@ -129,6 +144,11 @@ gref = SkyCoord(frame="galactic", l = glon_ref, b = glat_ref, unit=(u.deg, u.deg
 
 size = 5 # degree
 row_limit = -1 #5000
+# -
+
+# - In the mock catalog the positions are in ecuatorial coordinates, so the query has to be made on that frame.
+# - Host = 1 is to download only starts from milky way as done in Antoja's paper.
+# - I am downloading a $5° \times 5°$ patch at a certain (l,b) where I will inpaint the dwarf, and another patch of $7° \times 7°$ at (l+$\delta l$, b) as a reference.
 
 # +
 ra_center = gcenter.transform_to('icrs').ra.value
@@ -228,8 +248,8 @@ pmlat_dw = obs[:,6] / 1e3
 dw_data = np.vstack((glon_dw, glat_dw, pmlon_dw, pmlat_dw)).T
 # -
 
-#noDwarf = np.copy(full)
-full = np.copy(noDwarf)
+noDwarf = np.copy(full)
+#full = np.copy(noDwarf)
 full = np.vstack((full, dw_data))
 
 full.shape
@@ -245,6 +265,57 @@ ax[0].legend(loc = 'lower right')
 ax[1].scatter(ref[:,2], ref[:,3])
 ax[1].scatter(full[:,2], full[:,3])
 ax[1].scatter(dw_data[:,2], dw_data[:,3], color = 'magenta', marker = '+')
+
+# +
+color_full = 'darkcyan'
+color_dw = 'coral'
+color_ref = 'black'
+
+labels = ['$l$ [°]','$b$ [°]','$\mu_{l}$ [mas/yr]','$\mu_{b}$ [mas/yr]']
+
+bins = [np.linspace(145,155,10), np.linspace(-45,-35,10),np.linspace(-10,10,50),np.linspace(-10,10,50)]
+lims = [(145,135),(-45,-35),(-5,5),(-5,5)]
+
+fig, ax  = plt.subplots(4,4, figsize = (10,10), sharex = 'col')
+
+plt.subplots_adjust(hspace = 0.2, wspace = 0.2)
+
+for i in range(4):
+    for j in range(4):
+        if i < j: ax[i,j].set_axis_off()
+        if i > j:
+            #ax[i,j].set_xlim(lims[j])
+            ax[i,j].set_ylim(lims[i])
+            ax[i,j].scatter(ref[:,j], ref[:,i], color = color_ref, label = 'Ref', marker = '.', s = 5)
+            ax[i,j].scatter(full[:,j], full[:,i], color = color_full, label = 'Bkg', marker = '.', s = 5)
+            ax[i,j].scatter(dw_data[:,j], dw_data[:,i], color = color_dw, label = 'Dwarf', marker = '+')
+        if i == j:
+            ax[i,j].hist(ref[:,i], histtype = 'step', density = True, bins = bins[i], color = color_ref)
+            ax[i,j].hist(full[:,i], histtype = 'step', density = True, bins = bins[i], color = color_full)
+            ax[i,j].hist(dw_data[:,i], histtype = 'step', density = True, bins = bins[i], color = color_dw)
+        if i == 3: 
+            ax[i,j].set_xlabel(labels[j])
+        #else:
+         #   ax[i,j].set_xticks([])
+        if j == 0: 
+            ax[i,j].set_ylabel(labels[i])
+        else: 
+            ax[i,j].set_yticks([])
+    
+ax[0,0].set_xlim(145,155)
+ax[3,1].set_xlim(-45,-35)
+ax[3,2].set_xlim(-1,1)
+ax[3,3].set_xlim(-1,1)
+
+#ax[2,0].set_ylim(-200,200)
+#ax[2,1].set_ylim(-200,200)
+
+#ax[3,0].set_ylim(-200,200)
+#ax[3,1].set_ylim(-200,200)
+#ax[3,2].set_ylim(-200,200)
+
+ax[1,0].legend(loc = 'upper right', bbox_to_anchor = (2,2))
+#ax[1,0].set_ylim(lims[1])
 # -
 
 # ## Let's try demeter
@@ -519,7 +590,7 @@ fig,ax = plt.subplots(1,2)
 ax[0].scatter(ref[:,0], ref[:,1], c = 'black', marker = '+', label = 'Ref')
 ax[0].scatter(full[:,0], full[:,1], c = 'red', marker = '+', label = 'Full')
 ax[0].scatter(dw_data[:,0], dw_data[:,1], c = 'blue', marker = '.', label = 'Dwarf')
-ax[0].legend()
+ax[0].legend(loc = 'lower right')
 
 # #%ax[0].set_xlim(-0.012, -0.006)
 # #%ax[0].set_ylim(-0.012, -0.006)
@@ -590,15 +661,15 @@ ax[1].set_xlabel('$K_{*}$')
 
 # +
 fig,ax = plt.subplots(1,2)
-th = 22#critical_upsilon_threshold
+th = 23#critical_upsilon_threshold
 ax[0].scatter(dw_data[:,0], dw_data[:,1], marker = 'o',facecolors = 'none', edgecolors = 'black', s = 100)
 ind = np.argsort(upsilon_values_anomaly)[::-1]
 
-#ax[0].scatter(full[upsilon_values_anomaly > th,0], full[upsilon_values_anomaly > th,1], 
-#              c = upsilon_values_anomaly[upsilon_values_anomaly > th], marker = 'o', vmin = 0, vmax = np.max(upsilon_values_anomaly))
+ax[0].scatter(full[upsilon_values_anomaly > th,0], full[upsilon_values_anomaly > th,1], 
+              c = upsilon_values_anomaly[upsilon_values_anomaly > th], marker = 'o', vmin = 0, vmax = np.max(upsilon_values_anomaly))
 
-ax[0].scatter(full[ind[:250],0], full[ind[:250],1], 
-              c = upsilon_values_anomaly[ind[:250]], marker = 'o', vmin = 0, vmax = np.max(upsilon_values_anomaly))
+#ax[0].scatter(full[ind[:250],0], full[ind[:250],1], 
+#              c = upsilon_values_anomaly[ind[:250]], marker = 'o', vmin = 0, vmax = np.max(upsilon_values_anomaly))
 
 
 #ax[0].set_xlim(glon_center - 1, glon_center + 1)
