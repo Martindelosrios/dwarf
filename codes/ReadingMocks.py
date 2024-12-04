@@ -142,7 +142,7 @@ glon_ref = 120.5
 glat_ref = glat_center
 gref = SkyCoord(frame="galactic", l = glon_ref, b = glat_ref, unit=(u.deg, u.deg))
 
-size = 5 # degree
+size = 2 # degree
 row_limit = -1 #5000
 # -
 
@@ -231,15 +231,15 @@ ax[1].set_ylabel('$\mu_{b}$ [mas/yr]')
 # ## Let's inpaint a dwarf galaxy
 
 # +
-np.random.shuffle(full)
-full = full[:5000]
+#np.random.shuffle(full)
+#full = full[:5000]
 
-np.random.shuffle(ref)
-ref = ref[:5000]
+#np.random.shuffle(ref)
+#ref = ref[:5000]
 
 # +
-eps_lon = 1.5 # Inpaint the dwarf out of the center
-eps_lat = -1.6
+eps_lon = 1. # Inpaint the dwarf out of the center
+eps_lat = -1.
 
 glon_dw = (obs[:,2] * 180/np.pi - data[i,6]) + glon_center + eps_lon # Just to center the dwarf galaxy
 glat_dw = (obs[:,3] * 180/np.pi - data[i,7]) + glat_center + eps_lat
@@ -253,18 +253,6 @@ noDwarf = np.copy(full)
 full = np.vstack((full, dw_data))
 
 full.shape
-
-# +
-fig,ax = plt.subplots(1,2)
-
-ax[0].scatter(ref[:,0], ref[:,1], label = 'Ref')
-ax[0].scatter(full[:,0], full[:,1], label = 'Bkg')
-ax[0].scatter(dw_data[:,0], dw_data[:,1], color = 'magenta', marker = '+', label = 'Dwarf')
-ax[0].legend(loc = 'lower right')
-
-ax[1].scatter(ref[:,2], ref[:,3])
-ax[1].scatter(full[:,2], full[:,3])
-ax[1].scatter(dw_data[:,2], dw_data[:,3], color = 'magenta', marker = '+')
 
 # +
 color_full = 'darkcyan'
@@ -304,8 +292,8 @@ for i in range(4):
     
 ax[0,0].set_xlim(145,155)
 ax[3,1].set_xlim(-45,-35)
-ax[3,2].set_xlim(-1,1)
-ax[3,3].set_xlim(-1,1)
+ax[3,2].set_xlim(-10,10)
+ax[3,3].set_xlim(-10,10)
 
 #ax[2,0].set_ylim(-200,200)
 #ax[2,1].set_ylim(-200,200)
@@ -318,7 +306,9 @@ ax[1,0].legend(loc = 'upper right', bbox_to_anchor = (2,2))
 #ax[1,0].set_ylim(lims[1])
 # -
 
-# ## Let's try demeter
+# ## Let's try demeter 
+#
+# (not working well, i think because we need to do some normalization on the coordinates)
 
 module_path = 'demeter/'
 sys.path.append(module_path)
@@ -561,8 +551,6 @@ def plot_nlpval(ax, nlpval1, nlpval2, nlpval3, label1, label2, label3,crit_v):
     ax.set_xlabel('K-nearest neighbors')
     # ax.legend(loc='upper right')
 
-
-
 # +
 # Generate 100,000 Bernoulli sequences to determine the critical Upsilon threshold
 num_sequences = 1000            # Number of Bernoulli sequences
@@ -583,24 +571,6 @@ critical_upsilon_threshold = np.quantile(upsilon_values_bernoulli, critical_quan
 # -
 
 critical_upsilon_threshold
-
-# +
-fig,ax = plt.subplots(1,2)
-
-ax[0].scatter(ref[:,0], ref[:,1], c = 'black', marker = '+', label = 'Ref')
-ax[0].scatter(full[:,0], full[:,1], c = 'red', marker = '+', label = 'Full')
-ax[0].scatter(dw_data[:,0], dw_data[:,1], c = 'blue', marker = '.', label = 'Dwarf')
-ax[0].legend(loc = 'lower right')
-
-# #%ax[0].set_xlim(-0.012, -0.006)
-# #%ax[0].set_ylim(-0.012, -0.006)
-
-ax[1].scatter(ref[:,2], ref[:,3], c = 'black', marker = '+')
-ax[1].scatter(full[:,2], full[:,3], c = 'red', marker = '+')
-ax[1].scatter(dw_data[:,2], dw_data[:,3], c = 'blue', marker = '.')
-#ax[1].set_xlim(-3.5, -1.9)
-#ax[1].set_ylim(-3.5, -1.9)
-# -
 
 # Generate and process binary sequences with anomalies
 binary_sequences_anomaly, _ = From_data_to_binary.create_binary_array_cdist(
@@ -680,5 +650,76 @@ im1 = ax[1].scatter(noDwarf[upsilon_values_no_anomaly > th,0], noDwarf[upsilon_v
 plt.colorbar(im1)
 #ax[1].set_xlim(-0.012, -0.006)
 #ax[1].set_ylim(-0.012, -0.006)
+# +
+def purity(upsilon, ind, up_th = 20):
+    '''
+    Function to compute the purity of the cluster found by EE.
+
+    Parameters
+    ----------
+
+    upsilon: (np.array) upsilon values of all the analized stars.
+    ind: (np.array int) indices of the stars that trully belong to the dwarf galaxy.
+    up_th: (float) upsilon threshold. default = 20
+
+    Returns
+    -------
+
+    Purity defined as # dwarf stars (upsilon > up_th) / # stars (upsilon > up_th)
+    '''
+    return len(np.where(upsilon[ind] > up_th)[0]) / len(np.where(upsilon > up_th)[0])
+
+def FN(upsilon, ind, up_th = 20):
+    '''
+    Function to compute the dwarf stars missed by EE.
+
+    Parameters
+    ----------
+
+    upsilon: (np.array) upsilon values of all the analized stars.
+    ind: (np.array int) indices of the stars that trully belong to the dwarf galaxy.
+    up_th: (float) upsilon threshold. default = 20
+
+    Returns
+    -------
+
+    FN defined as # dwarf stars (upsilon < up_th) / # dwarf stars
+    '''
+    return len(np.where(upsilon[ind] < up_th)[0]) / len(ind)
+
+def Delta(full, upsilon, ind, up_th = 20):
+    '''
+    Function to compute the distances (angular and peculiar velocity) between the center of the cluster found by EE
+        and the dwarf galaxy.
+
+    Parameters
+    ----------
+
+    full: (np.array) data of the analized stars.    
+    upsilon: (np.array) upsilon values of all the analized stars.
+    ind: (np.array int) indices of the stars that trully belong to the dwarf galaxy.
+    up_th: (float) upsilon threshold. default = 20
+
+    Returns
+    -------
+
+    Distances defined as 
+        ang = np.sqrt( (l_{real} - <l>)^{2} + (b_{real} - <b>)^{2} )
+        vpec = np.sqrt( (mul_{real} - <mul>)^{2} + (mub_{real} - <mub>)^{2} )
+    '''
+    l_real = np.mean(full[ind,0])
+    b_real = np.mean(full[ind,1])
+    mul_real = np.mean(full[ind,2])
+    mub_real = np.mean(full[ind,3])
+
+    ind_aux = np.where(upsilon > up_th)[0]
+    l_cluster = np.mean(full[ind_aux, 0])
+    b_cluster = np.mean(full[ind_aux, 1])
+    mul_cluster = np.mean(full[ind_aux, 2])
+    mub_cluster = np.mean(full[ind_aux, 3])
+    
+    return np.sqrt( (l_real - l_cluster)**2 + (b_real - b_cluster)**2 ), \
+           np.sqrt( (mul_real - mul_cluster)**2 + (mub_real - mub_cluster)**2 )
 # -
+
 
