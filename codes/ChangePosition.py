@@ -306,11 +306,13 @@ def plotDwarf(ax, dw_data, full = None, ref = None, indices = None, nbins = 20):
 # # Let's run EE on a dwarf at different positions
 
 # +
-igal = 98
+igal = 96
 data = np.loadtxt('../data/mocks/library.survey.UFGX_LIB' + str(igal) + '.dat')
 
 i = np.random.randint(len(data))
 Id = int(data[i,0])
+ang_size = data[i,13]
+vpec_size = data[i,14]
 
 obs = np.loadtxt('../data/mocks/obs.lib' + str(igal) + '/UFGX_TEST' + str(igal) + '_lib/obs_' + str(Id) + '.dat')
 print(len(obs))
@@ -337,8 +339,8 @@ critical_upsilon_threshold = np.quantile(upsilon_values_bernoulli, critical_quan
 from itertools import product
 
 # Tus arrays de ejemplo
-latitudes = np.array([60])
-longitudes = np.array([120])
+latitudes = np.array([20,40,60])
+longitudes = np.array([10, 60, 120])
 
 # Generar todas las combinaciones posibles
 positions = list(product(longitudes, latitudes))
@@ -361,7 +363,7 @@ upsilons = []
 for pos in positions:
     start = time()
     full, ref, dw_data = LoadBkg(obs, glon_center = pos[0], glat_center = pos[1],
-                                 eps_lat = 0, eps_lon = 0, row_limit = 5000, size = 2)
+                                 eps_lat = 0, eps_lon = 0, row_limit = None, size = 2)
 
     ind = np.arange(len(full))[-len(dw_data):]
     # Generate and process binary sequences with anomalies
@@ -455,5 +457,9 @@ plt.subplots_adjust(hspace = 0.2, wspace = 0.2)
 
 ax = plotDwarf(ax, dw_data, full, ref, indices[0])
 # -
+
+
+
+
 
 
