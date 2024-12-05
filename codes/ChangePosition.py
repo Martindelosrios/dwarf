@@ -251,16 +251,16 @@ labels = ['$l$ [°]','$b$ [°]','$\mu_{l}$ [mas/yr]','$\mu_{b}$ [mas/yr]']
 
 
 
-def plotDwarf(ax, dw_data, full = None, ref = None, indices = None):
-    bins = [np.linspace(np.mean(dw_data[:,0]) - 2, np.mean(dw_data[:,0]) + 2, 50),
-            np.linspace(np.mean(dw_data[:,1]) - 2, np.mean(dw_data[:,1]) + 2, 50),
-            np.linspace(np.mean(dw_data[:,2]) - 1, np.mean(dw_data[:,2]) + 1, 50),
-            np.linspace(np.mean(dw_data[:,3]) - 1, np.mean(dw_data[:,3]) + 1, 50)]
+def plotDwarf(ax, dw_data, full = None, ref = None, indices = None, nbins = 20):
+    bins = [np.linspace(np.mean(dw_data[:,0]) - 2, np.mean(dw_data[:,0]) + 2, nbins),
+            np.linspace(np.mean(dw_data[:,1]) - 2, np.mean(dw_data[:,1]) + 2, nbins),
+            np.linspace(np.mean(dw_data[:,2]) - 3, np.mean(dw_data[:,2]) + 3, nbins),
+            np.linspace(np.mean(dw_data[:,3]) - 3, np.mean(dw_data[:,3]) + 3, nbins)]
 
     lims = [(np.mean(dw_data[:,0]) - 2, np.mean(dw_data[:,0]) + 2),
             (np.mean(dw_data[:,1]) - 2, np.mean(dw_data[:,1]) + 2),
-            (np.mean(dw_data[:,2]) - 1, np.mean(dw_data[:,2]) + 1),
-            (np.mean(dw_data[:,3]) - 1, np.mean(dw_data[:,3]) + 1)]
+            (np.mean(dw_data[:,2]) - 3, np.mean(dw_data[:,2]) + 3),
+            (np.mean(dw_data[:,3]) - 3, np.mean(dw_data[:,3]) + 3)]
 
     if indices is not None: 
         cluster = full[indices,:] 
@@ -306,9 +306,19 @@ def plotDwarf(ax, dw_data, full = None, ref = None, indices = None):
 # # Let's run EE on a dwarf at different positions
 
 # +
+igal = 98
+data = np.loadtxt('../data/mocks/library.survey.UFGX_LIB' + str(igal) + '.dat')
+
+i = np.random.randint(len(data))
+Id = int(data[i,0])
+
+obs = np.loadtxt('../data/mocks/obs.lib' + str(igal) + '/UFGX_TEST' + str(igal) + '_lib/obs_' + str(Id) + '.dat')
+print(len(obs))
+
+# +
 # Generate 100,000 Bernoulli sequences to determine the critical Upsilon threshold
 num_sequences = 1000            # Number of Bernoulli sequences
-K_M = 10                        # Length of each sequence
+K_M = 100                        # Length of each sequence
 NUM_CORES = 1
 NEIGHBOR_RANGE = range(4, K_M)
 critical_quantile = 0.9999        # Quantile to calculate critical Upsilon threshold
@@ -324,20 +334,11 @@ critical_upsilon_threshold = np.quantile(upsilon_values_bernoulli, critical_quan
 
 
 # +
-igal = 98
-data = np.loadtxt('../data/mocks/library.survey.UFGX_LIB' + str(igal) + '.dat')
-
-i = np.random.randint(len(data))
-Id = int(data[i,0])
-
-obs = np.loadtxt('../data/mocks/obs.lib' + str(igal) + '/UFGX_TEST' + str(igal) + '_lib/obs_' + str(Id) + '.dat')
-
-# +
 from itertools import product
 
 # Tus arrays de ejemplo
-latitudes = np.array([-90, -45, -20])
-longitudes = np.array([0, 60, 120])
+latitudes = np.array([60])
+longitudes = np.array([120])
 
 # Generar todas las combinaciones posibles
 positions = list(product(longitudes, latitudes))
@@ -356,10 +357,11 @@ glat     = []
 glon     = []
 
 indices = []
+upsilons = []
 for pos in positions:
     start = time()
     full, ref, dw_data = LoadBkg(obs, glon_center = pos[0], glat_center = pos[1],
-                                 eps_lat = 0, eps_lon = 0, row_limit = None, size = 2)
+                                 eps_lat = 0, eps_lon = 0, row_limit = 5000, size = 2)
 
     ind = np.arange(len(full))[-len(dw_data):]
     # Generate and process binary sequences with anomalies
@@ -370,6 +372,7 @@ for pos in positions:
         binary_sequences_anomaly, NEIGHBOR_RANGE, NUM_CORES
     )
 
+    upsilons.append(upsilon)
     glon.append(pos[0])
     glat.append(pos[1])
     up_th = np.quantile(upsilon, 0.8)
@@ -394,7 +397,7 @@ glat     = np.asarray(glat)
 
 # +
 fig,ax = plt.subplots(2,2, figsize = (6,6), sharex = True)
-plt.subplots_adjust(hspace = 0., wspace = 0.3)
+plt.subplots_adjust(hspace = 0., wspace = 0.4)
 
 ax[0,0].scatter(len(dw_data) / bkg, pur)
 #ax[0,0].set_xlabel('S/N')
@@ -415,22 +418,23 @@ ax[1,1].set_ylabel('$\Delta_{\mu}$')
 
 # +
 fig,ax = plt.subplots(2,2, figsize = (6,6), sharex = True)
-plt.subplots_adjust(hspace = 0., wspace = 0.3)
+plt.subplots_adjust(hspace = 0., wspace = 0.4)
 
-im00 = ax[0,0].scatter(glat, pur, c = glon, cmap = 'viridis')
+im00 = ax[0,0].scatter(glat, pur, c = glon, cmap = 'viridis', vmin = 0, vmax = 180)
 #ax[0,0].set_xlabel('$b [°]$')
-plt.colorbar(im00, ax = ax[0,:], orientation = 'horizontal', pad = 0.1, location = 'top', shrink = 0.5)
+cbar = plt.colorbar(im00, ax = ax[0,:], orientation = 'horizontal', pad = 0.1, location = 'top', shrink = 0.5)
+cbar.set_label('$l$ [°]')
 ax[0,0].set_ylabel('Purity')
 
-ax[0,1].scatter(glat, falseNeg, c = glon, cmap = 'viridis')
+ax[0,1].scatter(glat, falseNeg, c = glon, cmap = 'viridis', vmin = 0, vmax = 180)
 #ax[0,1].set_xlabel('$b [°]$')
-ax[0,1].set_ylabel('FN')
+ax[0,1].set_ylabel('Missing stars Ratio')
 
-ax[1,0].scatter(glat, dang, c = glon, cmap = 'viridis')
+ax[1,0].scatter(glat, dang, c = glon, cmap = 'viridis', vmin = 0, vmax = 180)
 ax[1,0].set_xlabel('$b [°]$')
 ax[1,0].set_ylabel('$\Delta_{ang}$')
 
-im11 = ax[1,1].scatter(glat, dvpec, c = glon, cmap = 'viridis')
+im11 = ax[1,1].scatter(glat, dvpec, c = glon, cmap = 'viridis', vmin = 0, vmax = 180)
 ax[1,1].set_xlabel('$b [°]$')
 ax[1,1].set_ylabel('$\Delta_{\mu}$')
 # -
@@ -444,14 +448,12 @@ sc = ax.scatter(glon * np.pi/180, glat * np.pi/180, c=pur, cmap='viridis', s=40)
 plt.colorbar(sc, label='Purity')
 ax.grid(True)
 
-len(dw_data) /
-
 # +
 fig, ax  = plt.subplots(4,4, figsize = (10,10), sharex = 'col')
 
 plt.subplots_adjust(hspace = 0.2, wspace = 0.2)
 
-ax = plotDwarf(ax, dw_data, full, ref, indices[1])
+ax = plotDwarf(ax, dw_data, full, ref, indices[0])
 # -
 
 
