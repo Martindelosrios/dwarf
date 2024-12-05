@@ -337,7 +337,7 @@ from itertools import product
 
 # Tus arrays de ejemplo
 latitudes = np.array([-90, -45, -20])
-longitudes = np.array([0, 80,120])
+longitudes = np.array([0, 60, 120])
 
 # Generar todas las combinaciones posibles
 positions = list(product(longitudes, latitudes))
@@ -347,11 +347,13 @@ print(positions)
 
 
 # +
-pur = []
+pur      = []
 falseNeg = []
-dang = []
-dvpec = []
-bkg = []
+dang     = []
+dvpec    = []
+bkg      = []
+glat     = []
+glon     = []
 
 indices = []
 for pos in positions:
@@ -368,6 +370,8 @@ for pos in positions:
         binary_sequences_anomaly, NEIGHBOR_RANGE, NUM_CORES
     )
 
+    glon.append(pos[0])
+    glat.append(pos[1])
     up_th = np.quantile(upsilon, 0.8)
     indices.append(np.where(upsilon >= up_th)[0])
     pur.append(purity(upsilon, ind, up_th = up_th))
@@ -378,6 +382,69 @@ for pos in positions:
     bkg.append((len(full) - len(dw_data)))
     stop = time()
     print('It takes {:.2f} hs to analyze a dwarf with {} stars at l = {:.2f} and b = {:.2f} with {} bkg stars'.format((stop-start)/3600, len(dw_data), pos[0], pos[1], len(full) - len(dw_data)))
+# -
+
+pur      = np.asarray(pur)
+falseNeg = np.asarray(falseNeg)
+dang     = np.asarray(dang)
+dvpec    = np.asarray(dvpec)
+bkg      = np.asarray(bkg)
+glon     = np.asarray(glon)
+glat     = np.asarray(glat)
+
+# +
+fig,ax = plt.subplots(2,2, figsize = (6,6), sharex = True)
+plt.subplots_adjust(hspace = 0., wspace = 0.3)
+
+ax[0,0].scatter(len(dw_data) / bkg, pur)
+#ax[0,0].set_xlabel('S/N')
+ax[0,0].set_ylabel('Purity')
+
+ax[0,1].scatter(len(dw_data) / bkg, falseNeg)
+#ax[0,0].set_xlabel('S/N')
+ax[0,1].set_ylabel('FN')
+
+ax[1,0].scatter(len(dw_data) / bkg, dang)
+ax[1,0].set_xlabel('S/N')
+ax[1,0].set_ylabel('$\Delta_{ang}$')
+
+ax[1,1].scatter(len(dw_data) / bkg, dvpec)
+ax[1,1].set_xlabel('S/N')
+ax[1,1].set_ylabel('$\Delta_{\mu}$')
+
+
+# +
+fig,ax = plt.subplots(2,2, figsize = (6,6), sharex = True)
+plt.subplots_adjust(hspace = 0., wspace = 0.3)
+
+im00 = ax[0,0].scatter(glat, pur, c = glon, cmap = 'viridis')
+#ax[0,0].set_xlabel('$b [°]$')
+plt.colorbar(im00, ax = ax[0,:], orientation = 'horizontal', pad = 0.1, location = 'top', shrink = 0.5)
+ax[0,0].set_ylabel('Purity')
+
+ax[0,1].scatter(glat, falseNeg, c = glon, cmap = 'viridis')
+#ax[0,1].set_xlabel('$b [°]$')
+ax[0,1].set_ylabel('FN')
+
+ax[1,0].scatter(glat, dang, c = glon, cmap = 'viridis')
+ax[1,0].set_xlabel('$b [°]$')
+ax[1,0].set_ylabel('$\Delta_{ang}$')
+
+im11 = ax[1,1].scatter(glat, dvpec, c = glon, cmap = 'viridis')
+ax[1,1].set_xlabel('$b [°]$')
+ax[1,1].set_ylabel('$\Delta_{\mu}$')
+# -
+
+grid = np.meshgrid(longitudes, latitudes)
+# Crear el mapa en Mollweide
+fig = plt.figure(figsize=(10, 5))
+ax = fig.add_subplot(111, projection='mollweide')
+sc = ax.scatter(glon * np.pi/180, glat * np.pi/180, c=pur, cmap='viridis', s=40)
+# Personalización
+plt.colorbar(sc, label='Purity')
+ax.grid(True)
+
+len(dw_data) /
 
 # +
 fig, ax  = plt.subplots(4,4, figsize = (10,10), sharex = 'col')
@@ -386,14 +453,5 @@ plt.subplots_adjust(hspace = 0.2, wspace = 0.2)
 
 ax = plotDwarf(ax, dw_data, full, ref, indices[1])
 # -
-
-grid = np.meshgrid(longitudes, latitudes)
-# Crear el mapa en Mollweide
-fig = plt.figure(figsize=(10, 5))
-ax = fig.add_subplot(111, projection='mollweide')
-sc = ax.scatter(grid[0] * np.pi/180, grid[1] * np.pi/180, c=np.asarray(pur), cmap='viridis', s=10, vmin = 0, vmax = 0.005)
-# Personalización
-plt.colorbar(sc, label='Purity')
-ax.grid(True)
 
 
