@@ -6,6 +6,9 @@ from astroquery.vizier import Vizier
 import sys
 import scipy
 from time import time
+import healpy as hp
+from itertools import product
+from tqdm import tqdm
 
 # Directory setup for custom modules
 module_path = 'EagleEye/eagleeye'
@@ -336,18 +339,24 @@ critical_upsilon_threshold = np.quantile(upsilon_values_bernoulli, critical_quan
 
 
 # +
-from itertools import product
-
-# Tus arrays de ejemplo
 latitudes = np.array([20,40,60])
 longitudes = np.array([10, 60, 120])
 
-# Generar todas las combinaciones posibles
 positions = list(product(longitudes, latitudes))
 
-# Resultado
 print(positions)
+# -
 
+
+NPIX = hp.nside2npix(3)
+
+glat, glon = np.degrees(hp.pix2ang(3, np.arange(NPIX)))
+
+glat = 90 - glat
+
+hp.pix2ang(3, np.arange(NPIX))
+
+len(np.where(np.abs(glat) > 20)[0])
 
 # +
 pur      = []
@@ -355,14 +364,19 @@ falseNeg = []
 dang     = []
 dvpec    = []
 bkg      = []
-glat     = []
-glon     = []
+# #%glat     = []
+# #%glon     = []
 
 indices = []
 upsilons = []
-for pos in positions:
+# #%for pos in positions:
+#%    start = time()
+#%    full, ref, dw_data = LoadBkg(obs, glon_center = pos[0], glat_center = pos[1],
+#%                                 eps_lat = 0, eps_lon = 0, row_limit = None, size = 2)
+
+for i in tqdm(np.where(np.abs(glat) > 20)[0]):
     start = time()
-    full, ref, dw_data = LoadBkg(obs, glon_center = pos[0], glat_center = pos[1],
+    full, ref, dw_data = LoadBkg(obs, glon_center = glon[i], glat_center = glat[i],
                                  eps_lat = 0, eps_lon = 0, row_limit = None, size = 2)
 
     ind = np.arange(len(full))[-len(dw_data):]
@@ -375,8 +389,8 @@ for pos in positions:
     )
 
     upsilons.append(upsilon)
-    glon.append(pos[0])
-    glat.append(pos[1])
+    # #%glon.append(pos[0])
+    # #%glat.append(pos[1])
     up_th = np.quantile(upsilon, 0.8)
     indices.append(np.where(upsilon >= up_th)[0])
     pur.append(purity(upsilon, ind, up_th = up_th))
@@ -386,7 +400,8 @@ for pos in positions:
     dvpec.append(aux2)
     bkg.append((len(full) - len(dw_data)))
     stop = time()
-    print('It takes {:.2f} hs to analyze a dwarf with {} stars at l = {:.2f} and b = {:.2f} with {} bkg stars'.format((stop-start)/3600, len(dw_data), pos[0], pos[1], len(full) - len(dw_data)))
+    #print('It takes {:.2f} hs to analyze a dwarf with {} stars at l = {:.2f} and b = {:.2f} with {} bkg stars'.format((stop-start)/3600, len(dw_data), pos[0], pos[1], len(full) - len(dw_data)))
+    print('It takes {:.2f} hs to analyze a dwarf with {} stars at l = {:.2f} and b = {:.2f} with {} bkg stars'.format((stop-start)/3600, len(dw_data), glon[i], glat[i], len(full) - len(dw_data)))
 # -
 
 pur      = np.asarray(pur)
@@ -397,17 +412,34 @@ bkg      = np.asarray(bkg)
 glon     = np.asarray(glon)
 glat     = np.asarray(glat)
 
+
 # +
+def transform_func(x):
+    return nstars / x  # Ejemplo de transformación: duplicar valores
+
+def inverse_transform_func(x):
+    return x / nstars  # Inversa de la transformación
+
+
+# +
+nstars = len(dw_data)
+
 fig,ax = plt.subplots(2,2, figsize = (6,6), sharex = True)
 plt.subplots_adjust(hspace = 0., wspace = 0.4)
+
+ax[0,0].text(0.9,1.2,'Gal {} ; {} stars'.format(Id, len(dw_data)), transform = ax[0,0].transAxes)
 
 ax[0,0].scatter(len(dw_data) / bkg, pur)
 #ax[0,0].set_xlabel('S/N')
 ax[0,0].set_ylabel('Purity')
+ax00 = ax[0,0].secondary_xaxis('top', functions=(transform_func, inverse_transform_func))
+ax00.set_xlabel('# Bkg')
 
 ax[0,1].scatter(len(dw_data) / bkg, falseNeg)
 #ax[0,0].set_xlabel('S/N')
 ax[0,1].set_ylabel('FN')
+ax01 = ax[0,1].secondary_xaxis('top', functions=(transform_func, inverse_transform_func))
+ax01.set_xlabel('# Bkg')
 
 ax[1,0].scatter(len(dw_data) / bkg, dang)
 ax[1,0].set_xlabel('S/N')
@@ -416,6 +448,8 @@ ax[1,0].set_ylabel('$\Delta_{ang}$')
 ax[1,1].scatter(len(dw_data) / bkg, dvpec)
 ax[1,1].set_xlabel('S/N')
 ax[1,1].set_ylabel('$\Delta_{\mu}$')
+
+#plt.savefig('../graph/gal_{}_ChangePositionStats.pdf'.format(Id), bbox_inches='tight')
 
 
 # +
@@ -439,8 +473,10 @@ ax[1,0].set_ylabel('$\Delta_{ang}$')
 im11 = ax[1,1].scatter(glat, dvpec, c = glon, cmap = 'viridis', vmin = 0, vmax = 180)
 ax[1,1].set_xlabel('$b [°]$')
 ax[1,1].set_ylabel('$\Delta_{\mu}$')
-# -
 
+#plt.savefig('../graph/gal_{}_ChangePositionStats_Lat.pdf'.format(Id), bbox_inches='tight')
+
+# +
 grid = np.meshgrid(longitudes, latitudes)
 # Crear el mapa en Mollweide
 fig = plt.figure(figsize=(10, 5))
@@ -450,16 +486,32 @@ sc = ax.scatter(glon * np.pi/180, glat * np.pi/180, c=pur, cmap='viridis', s=40)
 plt.colorbar(sc, label='Purity')
 ax.grid(True)
 
+#plt.savefig('../graph/gal_{}_Map.pdf'.format(Id), bbox_inches='tight')
+
 # +
 fig, ax  = plt.subplots(4,4, figsize = (10,10), sharex = 'col')
 
 plt.subplots_adjust(hspace = 0.2, wspace = 0.2)
 
-ax = plotDwarf(ax, dw_data, full, ref, indices[0])
+ax = plotDwarf(ax, dw_data, full, ref, indices[8])
+
+#plt.savefig('../graph/gal_{}_4d.pdf'.format(Id), bbox_inches='tight')
 # -
+data = np.zeros(NPIX)  # Array 1D de ejemplo
+data[np.where(np.abs(glat) > 20)[0]] = 1
+
+# Graficar el mapa en coordenadas Mollweide
+hp.mollview(data, title="Mapa de Healpix", unit="Amplitud", cmap="viridis")
+plt.show()
 
 
+pixel_index = hp.ang2pix(2, glon * np.pi/180, glat * np.pi/180, nest=False)
 
+data[pixel_index] = pur
+
+data[pixel_index]
+
+1
 
 
 
