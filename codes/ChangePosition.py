@@ -324,7 +324,7 @@ print(len(obs))
 # Generate 100,000 Bernoulli sequences to determine the critical Upsilon threshold
 num_sequences = 1000            # Number of Bernoulli sequences
 K_M = 100                        # Length of each sequence
-NUM_CORES = 1
+NUM_CORES = 40
 NEIGHBOR_RANGE = range(4, K_M)
 critical_quantile = 0.9999        # Quantile to calculate critical Upsilon threshold
 
